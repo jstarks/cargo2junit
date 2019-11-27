@@ -41,7 +41,7 @@ jobs:
           source: 'specific'
           artifactName: 'cache'
           path: '$(Build.SourcesDirectory)/out1'
-          project: cachesandbox
+          project: '$(system.teamProjectId)'
           pipeline: 17
           runVersion: 'specific'
           runId: 848
