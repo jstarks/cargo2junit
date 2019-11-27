@@ -82,6 +82,7 @@ jobs:
         displayName: install 7-zip on VS2015
 
       - powershell: |
+          Install-WindowsFeature -Name FS-Data-Deduplication
           Enable-DedupVolume -Volume "D:"
         condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
         displayName: enable dataport
