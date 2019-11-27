@@ -28,177 +28,30 @@ jobs:
   - job: cached
     pool:
       name: $(POOL_NAME)
-      vmImage: $(VM_IMAGE)
     strategy:
       matrix:
         vs2019-msvc-dataport:
           TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: windows-2019
+          POOL_NAME: dataport
           ENABLE_DATAPORT: 1
 
     steps:
-      - bash: |
-          echo "$(CARGO_DEPENDENCIES_FILE)"
-          echo "$CARGO_DEPENDENCIES_FILE"
-          grep checksum ./Cargo.lock > "$CARGO_DEPENDENCIES_FILE"
-        displayName: 'extract dependencies from cargo.lock'
-
-      - script: |
-          @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
-          choco install 7zip.portable -y
-          xcopy /y /e c:\ProgramData\chocolatey\lib\7zip.portable\tools\* c:\windows\system32\
-        condition: and(succeeded(), eq(variables['VM_IMAGE'], 'vs2015-win2012r2')) 
-        displayName: install 7-zip on VS2015
-
-      - powershell: |
-          Install-WindowsFeature -Name FS-Data-Deduplication
-          Enable-DedupVolume -Volume "D:"
-          Get-DedupVolume
-          Start-DedupJob -Volume "D:" -Type DataPort
-        condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
-        displayName: enable dataport
-
-      # set up environment and restore cache
-      - bash: |
-          rm -Rf "$RUSTCACHE_ROOT"
-          echo "##vso[task.prependpath]$(CARGO_HOME)/bin"
-        displayName: clean state on private agents
-      
-      # remove once https://github.com/microsoft/azure-pipelines-agent/pull/2400 is deployed
-      - bash: |
-          mkdir "$RUSTCACHE_ROOT"
-        displayName: create folder
-
-      - task: CacheBeta@0
-        inputs:
-          key: '$(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml | $(Build.SourceVersion)'
-          path: $(RUSTCACHE_ROOT)
-          cacheHitVar: CACHE_LOOKUP_RESULT
-          restoreKeys: |
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE)
-            $(CACHE_KEY_BASE)
-
-      # install tools (these will be cached)
-      - bash: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path --default-toolchain none
-          which rustup && rustup -V
-        displayName: Enusure rustup is installed
-      - bash: |
-          rustup toolchain install stable-$(TOOLS_TARGET)
-          rustup default stable-$(TOOLS_TARGET)
-          rustup update stable-$(TOOLS_TARGET)
-          which rustup && rustup -V && which cargo && cargo -V && which rustc && rustc -V
-        displayName: Select toolchain for tools
-      - bash: |
-          cargo install sccache
-          echo '##vso[task.setvariable variable=RUSTC_WRAPPER]sccache'
-          which sccache && sccache --version && sccache --show-stats
-        displayName: Install sccache
-        condition: and(succeeded(), eq(variables['ENABLE_SCCACHE'], '1'))
-      - bash: |
-          cargo install cargo2junit
-          which cargo2junit
-        displayName: Install cargo2junit
-      - bash: |
-          cargo install cargo-cache
-          cargo cache
-        displayName: Install cargo-cache
-      - bash: |
-          export RUSTC_WRAPPER=
-          cargo install cargo-update
-          cargo install-update -a
-        displayName: Ensure cargo-installed tools are up-to-date (if updateing the cache anyway)
-        condition: and(succeeded(), ne(variables['CACHE_LOOKUP_RESULT'], 'true')) 
-      - bash: |
-          rustup toolchain install $(CHANNEL)-$(TARGET)
-          rustup default $(CHANNEL)-$(TARGET)
-          rustup update $(CHANNEL)-$(TARGET)
-          which rustup && rustup -V && which cargo && cargo -V && which rustc && rustc -V
-        displayName: Select toolchain for build
-
-      # build and test
-      - bash: |
-          cargo build
-        displayName: cargo build
-      - bash: |
-          cargo test -- -Z unstable-options --format json | tee test_results_debug.json
-        displayName: cargo test
-
-      - bash: |
-          cargo build --release
-        displayName: cargo build --release
-      - bash: |
-          cargo test --release -- -Z unstable-options --format json | tee test_results_release.json
-        displayName: cargo test --release
-
-      # store test results
-      - bash: |
-          cat test_results_debug.json | cargo2junit > test_results_debug_lkg.xml
-          cat test_results_release.json | cargo2junit > test_results_release_lkg.xml
-        displayName: convert to junit using LKG cargo2junit
-        condition: succeededOrFailed()
-      - task: PublishTestResults@2
-        inputs: 
-          testResultsFormat: 'JUnit'
-          testResultsFiles: 'test_results_debug_lkg.xml'
-          testRunTitle: LKG_DEBUG_$(System.JobDisplayName)
-          buildPlatform: LKG_DEBUG_$(System.JobDisplayName)
-        condition: succeededOrFailed()
-      - task: PublishTestResults@2
-        inputs: 
-          testResultsFormat: 'JUnit'
-          testResultsFiles: 'test_results_release_lkg.xml'
-          testRunTitle: LKG_RELEASE_$(System.JobDisplayName)
-          buildPlatform: LKG_RELEASE_$(System.JobDisplayName)
-        condition: succeededOrFailed()
-
-      # self-host test of cargo2junit: store test results using the cargo2junit that was just built
-      - bash: |
-          cat test_results_debug.json | ./target/debug/cargo2junit > test_results_debug.xml
-          cat test_results_release.json | ./target/debug/cargo2junit > test_results_release.xml
-        displayName: convert to junit using just-built cargo2junit
-      - task: PublishTestResults@2
-        inputs: 
-          testResultsFormat: 'JUnit'
-          testResultsFiles: 'test_results_debug.xml'
-          testRunTitle: DEBUG_$(System.JobDisplayName)
-          buildPlatform: DEBUG_$(System.JobDisplayName)
-        condition: succeededOrFailed()
-      - task: PublishTestResults@2
-        inputs: 
-          testResultsFormat: 'JUnit'
-          testResultsFiles: 'test_results_release.xml'
-          testRunTitle: RELEASE_$(System.JobDisplayName)
-          buildPlatform: RELEASE_$(System.JobDisplayName)
-        condition: succeededOrFailed()
-
-      # some cleanup before the cache stores
-      - bash: |
-          sccache --show-stats
-          sccache --stop-server
-        displayName: shutdown sccache
-        condition: eq(variables['ENABLE_SCCACHE'], '1')
-        continueOnError: true
-      - bash: |
-          cargo cache
-          cargo cache --autoclean
-          cargo cache
-        displayName: run cargo cache --autoclean
-
-      - task: PublishPipelineArtifact@1
+      - task: DownloadPipelineArtifact@2
         inputs:
           artifactName: 'cache'
-          targetPath: '$(RUSTCACHE_ROOT)' 
+          targetPath: '$(Build.SourcesDirectory)/out1'
+          buildType: specific
+          project: cachesandbox
+          definition: johnterickson.cargo2junit
+          buildVersionToDownload: specific
+          pipelineId: 848
 
       - task: DownloadPipelineArtifact@2
         inputs:
           artifactName: 'cache'
-          targetPath: '$(RUSTCACHE_ROOT)_1'
-
-      - task: DownloadPipelineArtifact@2
-        inputs:
-          artifactName: 'cache'
-          targetPath: '$(RUSTCACHE_ROOT)_2' 
-
+          targetPath: '$(Build.SourcesDirectory)/out2'
+          buildType: specific
+          project: cachesandbox
+          definition: johnterickson.cargo2junit
+          buildVersionToDownload: specific
+          pipelineId: 848
