@@ -21,9 +21,8 @@ variables:
   TOOLS_TARGET: $(TARGET)
   POOL_NAME: ''
   VM_IMAGE: ''
-  AZP_CACHING_TAR: 1
-  AZP_CACHING_CONTENT_FORMAT: SingleTar
   ENABLE_SCCACHE: 0
+  System.Debug: true
 
 jobs:
   - job: cached
@@ -32,40 +31,10 @@ jobs:
       vmImage: $(VM_IMAGE)
     strategy:
       matrix:
-        vs2015-gnu:
-          TARGET: x86_64-pc-windows-gnu
-          TOOLS_TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: vs2015-win2012r2
-        vs2017-gnu:
-          TARGET: x86_64-pc-windows-gnu
-          TOOLS_TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: vs2017-win2016
-        vs2019-gnu:
-          TARGET: x86_64-pc-windows-gnu
-          TOOLS_TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: windows-2019
-        vs2015-msvc:
-          TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: vs2015-win2012r2
-        vs2017-msvc:
-          TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: vs2017-win2016
-        vs2019-msvc:
-          TARGET: x86_64-pc-windows-msvc
-          VM_IMAGE: windows-2019
         vs2019-msvc-dataport:
           TARGET: x86_64-pc-windows-msvc
           VM_IMAGE: windows-2019
           ENABLE_DATAPORT: 1
-        osx-10.13-x86_64-apple-darwin:
-          TARGET: x86_64-apple-darwin
-          VM_IMAGE: macos-10.13
-        osx-10.14-x86_64-apple-darwin:
-          TARGET: x86_64-apple-darwin
-          VM_IMAGE: macos-10.14
-        x86_64-unknown-linux-gnu:
-          TARGET: x86_64-unknown-linux-gnu
-          VM_IMAGE: ubuntu-16.04
 
     steps:
       - bash: |
@@ -84,6 +53,7 @@ jobs:
       - powershell: |
           Install-WindowsFeature -Name FS-Data-Deduplication
           Enable-DedupVolume -Volume "D:"
+          Get-DedupVolume
         condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
         displayName: enable dataport
 
@@ -97,19 +67,6 @@ jobs:
       - bash: |
           mkdir "$RUSTCACHE_ROOT"
         displayName: create folder
-
-      - task: CacheBeta@0
-        inputs:
-          key: '$(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml | $(Build.SourceVersion)'
-          path: $(RUSTCACHE_ROOT)_PRIME
-          cacheHitVar: CACHE_LOOKUP_RESULT
-          restoreKeys: |
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock
-            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE)
-            $(CACHE_KEY_BASE)
-        condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
-        displayName: prime dataport 
 
       - task: CacheBeta@0
         inputs:
@@ -228,3 +185,19 @@ jobs:
           cargo cache --autoclean
           cargo cache
         displayName: run cargo cache --autoclean
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          artifactName: 'cache'
+          targetPath: '$(RUSTCACHE_ROOT)' 
+
+      - task: DownloadPipelineArtifact@2
+        inputs:
+          artifactName: 'cache'
+          targetPath: '$(RUSTCACHE_ROOT)_1'
+
+      - task: DownloadPipelineArtifact@2
+        inputs:
+          artifactName: 'cache'
+          targetPath: '$(RUSTCACHE_ROOT)_2' 
+
