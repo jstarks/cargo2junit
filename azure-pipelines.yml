@@ -100,6 +100,19 @@ jobs:
       - task: CacheBeta@0
         inputs:
           key: '$(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml | $(Build.SourceVersion)'
+          path: $(RUSTCACHE_ROOT)_PRIME
+          cacheHitVar: CACHE_LOOKUP_RESULT
+          restoreKeys: |
+            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml
+            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock
+            $(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE)
+            $(CACHE_KEY_BASE)
+        condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
+        displayName: prime dataport 
+
+      - task: CacheBeta@0
+        inputs:
+          key: '$(CACHE_KEY_BASE) | $(CARGO_DEPENDENCIES_FILE) | ./Cargo.lock | ./Cargo.toml | $(Build.SourceVersion)'
           path: $(RUSTCACHE_ROOT)
           cacheHitVar: CACHE_LOOKUP_RESULT
           restoreKeys: |
