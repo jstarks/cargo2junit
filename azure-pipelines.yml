@@ -38,20 +38,10 @@ jobs:
     steps:
       - task: DownloadPipelineArtifact@2
         inputs:
+          source: 'specific'
           artifactName: 'cache'
-          targetPath: '$(Build.SourcesDirectory)/out1'
-          buildType: specific
+          path: '$(Build.SourcesDirectory)/out1'
           project: cachesandbox
-          definition: johnterickson.cargo2junit
-          buildVersionToDownload: specific
-          pipelineId: 848
-
-      - task: DownloadPipelineArtifact@2
-        inputs:
-          artifactName: 'cache'
-          targetPath: '$(Build.SourcesDirectory)/out2'
-          buildType: specific
-          project: cachesandbox
-          definition: johnterickson.cargo2junit
-          buildVersionToDownload: specific
-          pipelineId: 848
+          pipeline: 17
+          runVersion: 'specific'
+          runId: 848
