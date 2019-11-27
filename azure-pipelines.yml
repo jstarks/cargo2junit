@@ -53,6 +53,10 @@ jobs:
         vs2019-msvc:
           TARGET: x86_64-pc-windows-msvc
           VM_IMAGE: windows-2019
+        vs2019-msvc-dataport:
+          TARGET: x86_64-pc-windows-msvc
+          VM_IMAGE: windows-2019
+          ENABLE_DATAPORT: 1
         osx-10.13-x86_64-apple-darwin:
           TARGET: x86_64-apple-darwin
           VM_IMAGE: macos-10.13
@@ -76,6 +80,11 @@ jobs:
           xcopy /y /e c:\ProgramData\chocolatey\lib\7zip.portable\tools\* c:\windows\system32\
         condition: and(succeeded(), eq(variables['VM_IMAGE'], 'vs2015-win2012r2')) 
         displayName: install 7-zip on VS2015
+
+      - powershell: |
+          Enable-DedupVolume -Volume "D:"
+        condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
+        displayName: enable dataport
 
       # set up environment and restore cache
       - bash: |
