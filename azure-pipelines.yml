@@ -54,6 +54,7 @@ jobs:
           Install-WindowsFeature -Name FS-Data-Deduplication
           Enable-DedupVolume -Volume "D:"
           Get-DedupVolume
+          Start-DedupJob -Volume "D:" -Type DataPort
         condition: and(succeeded(), eq(variables['ENABLE_DATAPORT'], '1')) 
         displayName: enable dataport
 
